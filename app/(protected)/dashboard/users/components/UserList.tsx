@@ -4,8 +4,9 @@
 import { useState, useEffect } from 'react';
 import { Table, TableHeader, TableColumn, TableBody, TableRow, TableCell, Button, Spinner } from '@nextui-org/react';
 import { User } from '@/lib/types';
-import { fetchUsers, deleteUser } from '@/lib/api';
+// import { fetchUsers, deleteUser } from '@/lib/api';
 import Link from 'next/link';
+import DjangoClient from '@/lib/DjangoClient';
 
 const UserList: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
@@ -15,7 +16,11 @@ const UserList: React.FC = () => {
   useEffect(() => {
     const getUsers = async () => {
       try {
-        const fetchedUsers = await fetchUsers();
+        const userClient = new DjangoClient<User>('/api/users');
+        const fetchedUsers = await userClient.list({ ordering: '-id' }); 
+        console.log("==============================================================================")
+        console.log(fetchedUsers)
+        console.log("==============================================================================")
         setUsers(fetchedUsers);
       } catch (err) {
         if (err instanceof Error) {
@@ -34,8 +39,8 @@ const UserList: React.FC = () => {
   const handleDelete = async (id: number) => {
     if (window.confirm('Are you sure you want to delete this user?')) {
       try {
-        await deleteUser(id);
-        setUsers(users.filter((user) => user.id !== id));
+        // await deleteUser(id);
+        // setUsers(users.filter((user) => user.id !== id));
       } catch (err) {
         if (err instanceof Error) {
           setError(err.message);

@@ -1,9 +1,11 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 'use client';
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSearchParams } from 'next/navigation';
 import { Button, Input, Spacer, Card,  } from '@nextui-org/react';
+import { useAuth } from '@/providers/AuthProvider';
 
 export default function SignInForm() {
   const router = useRouter();
@@ -13,36 +15,19 @@ export default function SignInForm() {
   const [success, setSuccess] = useState('');
   const [isSubmit, setIssubmit] = useState(false);
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get('callbackUrl') || '/dashboard/profile';
-
+  const { login,isLoading,isAuthenticated } = useAuth();
   const handleSubmit = async (event: { preventDefault: () => void }) => {
     event.preventDefault();
-    setIssubmit(true);
     setError('');
 
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password }),
-      });
-      setIssubmit(false);
-      if (response.ok) {
-        setSuccess('Login successful ' );
-        router.push(callbackUrl); // Redirect to the original protected page or home
-      } else {
-        const data = await response.json();
-        setPassword("")
-
-        setError(data.message == 'Login failed'? 'Invalid email or password': data.message);
+      await login(email, password);
+      if (isAuthenticated) {
+        setSuccess('Login successful' );
       }
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    } catch (err) {
+    } catch (error) {
       setPassword("")
-     
-      setError('An error occurred during login: ');
+      setError('Invalid email or password');
     }
   };
 
@@ -83,7 +68,7 @@ export default function SignInForm() {
             required
           />
           <Spacer y={1.5} />
-          <Button type="submit" color='primary' disabled={isSubmit} isLoading={isSubmit} fullWidth spinner={
+          <Button type="submit" color='primary' disabled={isLoading} isLoading={isLoading} fullWidth spinner={
         <svg
           className="animate-spin h-5 w-5 text-current"
           fill="none"

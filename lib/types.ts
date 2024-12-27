@@ -14,3 +14,11 @@ export interface User {
     name: string;
     // ... other role properties
   }
+
+export interface Model {
+  id?: number; // Primary key - most Django models have an 'id' field
+}
+
+export interface QueryParams {
+  [key: string]: string | number | boolean | (string | number | boolean)[]; // Allow for various data types in query parameters
+}

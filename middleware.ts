@@ -1,22 +1,36 @@
 // middleware.ts
 import { NextResponse } from 'next/server';
-import { isAuthenticated,  } from './lib/auth';
 import type { NextRequest } from 'next/server';
 
-export async function middleware(request: NextRequest): Promise<Response | undefined> {
-  const isAuth = await isAuthenticated();
-  const pathname = request.nextUrl.pathname;
+// Define protected routes patterns
+const protectedRoutes = [
+  '/dashboard',
+  '/settings',
+  '/profile',
+  // Add more protected routes as needed
+];
 
-  // Check if the user is trying to access a protected route
-  if (pathname.startsWith('/(protected)') && !isAuth) {
-    const newUrl = new URL('/(auth)/signin', request.url);
-    newUrl.searchParams.set('callbackUrl', pathname);
-    return NextResponse.redirect(newUrl);
+export function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  // Check if the route is protected
+  const isProtectedRoute = protectedRoutes.some(route => 
+    pathname.startsWith(route)
+  );
+
+  // Get the token from cookies
+  const token = request.cookies.get('access_token');
+
+  if (isProtectedRoute && !token) {
+    // Redirect to login if trying to access protected route without token
+    const url = new URL('/auth/login', request.url);
+    url.searchParams.set('from', pathname);
+    return NextResponse.redirect(url);
   }
 
-  // Check if the user is trying to access an auth route while authenticated
-  if (pathname.startsWith('/(auth)') && isAuth) {
-    return NextResponse.redirect(new URL('/auth/login', request.url));
+  // Allow access to auth routes only if user is not logged in
+  if (pathname.startsWith('/auth/') && token) {
+    return NextResponse.redirect(new URL('/dashboard', request.url));
   }
 
   return NextResponse.next();
@@ -25,13 +39,13 @@ export async function middleware(request: NextRequest): Promise<Response | undef
 export const config = {
   matcher: [
     /*
-     * Match all request paths except for the ones starting with:
+     * Match all request paths except for:
      * - api (API routes)
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
+     * - public folder
      */
-    
-    '/((?!api|_next/static|_next/image|favicon.ico).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|public).*)',
   ],
 };

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Input, Button,  } from '@nextui-org/react';
 import { User } from '@/lib/types';
-import { fetchUser, createUser, updateUser } from '@/lib/api';
+import { fetchUser, createUser, updateUser } from '@/lib/apiClient';
 import { useRouter } from 'next/navigation';
 import { useSearchParams } from 'next/navigation'
 
