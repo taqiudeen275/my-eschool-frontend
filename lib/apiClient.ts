@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // apiClient.ts
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
+import Cookies from 'js-cookie';
 
 interface ApiClientConfig {
   baseURL: string;
@@ -20,15 +21,36 @@ class DjangoApiClient {
     this.axiosInstance = axios.create({
       baseURL: config.baseURL,
       timeout: config.timeout || 10000,
+      headers: {
+        'Content-Type': 'application/json',
+      }
     });
+
+    // Add request interceptor to include the latest access token
+    this.axiosInstance.interceptors.request.use(
+      (config) => {
+        const token = Cookies.get('access_token');
+        if (token) {
+          config.headers['Authorization'] = `Bearer ${token}`;
+        }
+        return config;
+      },
+      (error) => {
+        return Promise.reject(error);
+      }
+    );
 
     // Add response interceptor for handling token refresh
     this.axiosInstance.interceptors.response.use(
       (response) => response,
       async (error) => {
         const originalRequest = error.config;
-
-        if (error.response?.status === 401 && !originalRequest._retry) {
+        
+        if (
+          error.response?.status === 401 && 
+          !originalRequest._retry &&
+          !originalRequest.url?.includes('token/refresh/')
+        ) {
           originalRequest._retry = true;
 
           try {
@@ -36,9 +58,8 @@ class DjangoApiClient {
             originalRequest.headers['Authorization'] = `Bearer ${newAccessToken}`;
             return this.axiosInstance(originalRequest);
           } catch (refreshError) {
-            // Handle refresh token failure (e.g., logout user)
             this.clearTokens();
-            throw refreshError;
+            return Promise.reject(refreshError);
           }
         }
 
@@ -47,37 +68,48 @@ class DjangoApiClient {
     );
   }
 
-  // Token management methods
   setTokens(tokens: AuthTokens): void {
-    localStorage.setItem('access_token', tokens.access);
-    localStorage.setItem('refresh_token', tokens.refresh);
-    this.axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${tokens.access}`;
+    Cookies.set('access_token', tokens.access, {
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/'
+    });
+    
+    Cookies.set('refresh_token', tokens.refresh, {
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/'
+    });
   }
 
   clearTokens(): void {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-    delete this.axiosInstance.defaults.headers.common['Authorization'];
+    Cookies.remove('access_token', { path: '/' });
+    Cookies.remove('refresh_token', { path: '/' });
   }
 
   private async refreshAccessToken(): Promise<string> {
-    // Ensure we only make one refresh request at a time
     if (!this.refreshTokenPromise) {
       this.refreshTokenPromise = (async () => {
-        const refreshToken = localStorage.getItem('refresh_token');
+        const refreshToken = Cookies.get('refresh_token');
         
         if (!refreshToken) {
           throw new Error('No refresh token available');
         }
 
         try {
+          // Use the main axios instance but with the refresh token payload
           const response = await this.axiosInstance.post('/token/refresh/', {
-            refresh: refreshToken,
+            refresh: refreshToken  // This is what was missing - explicitly sending the refresh token
           });
 
           const { access } = response.data;
-          localStorage.setItem('access_token', access);
-          this.axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${access}`;
+          
+          // Update only the access token
+          Cookies.set('access_token', access, {
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            path: '/'
+          });
           
           return access;
         } finally {
@@ -116,12 +148,10 @@ class DjangoApiClient {
   }
 }
 
-// Create and export a singleton instance
 export const apiClient = new DjangoApiClient({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api',
 });
 
-// Type definitions for your API responses
 export interface User {
   id: number;
   email: string;
@@ -136,16 +166,13 @@ export interface LoginResponse {
   user: User;
 }
 
-// API hooks using SWR
 import useSWR, { SWRConfiguration } from 'swr';
 
 export function useUser(config?: SWRConfiguration) {
   const res = useSWR<User>('/users/me/', (url) => apiClient.get(url), config);
-  console.log("RES:------", res)
-  return res
+  return res;
 }
 
-// Authentication helper functions
 export const auth = {
   async login(email: string, password: string): Promise<LoginResponse> {
     const response = await apiClient.post<LoginResponse>('/token/', {
